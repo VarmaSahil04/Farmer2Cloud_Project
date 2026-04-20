@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Order Details — FarmToCloud</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <nav class="navbar" id="navbar"></nav>
+
+    <div class="page-wrapper">
+        <div class="flex-between mb-6">
+            <h1 style="font-size:28px; font-weight:800;">📋 Order Details</h1>
+            <a href="javascript:history.back()" class="btn btn-sm btn-outline">← Back</a>
+        </div>
+
+        <div id="orderContent"><p class="text-muted">Loading order...</p></div>
+    </div>
+
+    <script src="/js/app.js"></script>
+    <script>
+        if (!requireAuth()) throw 'unauthorized';
+
+        const orderId = new URLSearchParams(window.location.search).get('id');
+        if (!orderId) { showToast('No order ID', 'error'); throw 'no id'; }
+
+        async function loadOrder() {
+            try {
+                const res = await apiGet(`/api/orders/${orderId}`);
+                const o = res.data;
+                const role = getUserRole();
+
+                let verifyHtml = '';
+                try {
+                    const v = await apiGet(`/api/verify/${orderId}`);
+                    verifyHtml = `
+                        <div class="glass-card mt-6">
+                            <h2 class="section-title">📸 Verification Proof</h2>
+                            <div class="grid-2">
+                                <div><span class="text-muted">Verified Weight:</span> <strong>${v.data.verifiedWeight} kg</strong></div>
+                                <div><span class="text-muted">Verified By:</span> <strong>${v.data.verifiedBy || '—'}</strong></div>
+                                <div><span class="text-muted">Notes:</span> ${v.data.qualityNotes || '—'}</div>
+                                <div><span class="text-muted">Date:</span> ${formatDateTime(v.data.verifiedAt)}</div>
+                            </div>
+                        </div>`;
+                } catch(e) {}
+
+                let deliveryHtml = '';
+                try {
+                    const d = await apiGet(`/api/delivery/order/${orderId}`);
+                    deliveryHtml = `
+                        <div class="glass-card mt-6">
+                            <h2 class="section-title">🚚 Delivery Info</h2>
+                            <div class="grid-2">
+                                <div><span class="text-muted">Partner:</span> <strong>${d.data.partnerName}</strong></div>
+                                <div><span class="text-muted">Phone:</span> ${d.data.partnerPhone || '—'}</div>
+                                <div><span class="text-muted">Status:</span> ${getStatusBadge(d.data.status)}</div>
+                                <div><span class="text-muted">Assigned:</span> ${formatDateTime(d.data.assignedAt)}</div>
+                            </div>
+                        </div>`;
+                } catch(e) {}
+
+                let actionsHtml = '';
+                if (o.status === 'PENDING' && role === 'FARMER') {
+                    actionsHtml += `<button onclick="assignDelivery()" class="btn btn-primary">🚛 Assign Delivery</button> `;
+                } else if (o.status === 'PENDING' && role !== 'FARMER') {
+                    actionsHtml += `<div style="padding: 12px; background: rgba(59, 130, 246, 0.1); border-left: 4px solid var(--primary); border-radius: 4px; width: 100%;"><strong>Awaiting Farmer:</strong> The farmer must hit 'Assign Delivery' before this order can proceed to pickup. Please wait!</div>`;
+                }
+
+                if (o.status === 'PICKUP_ASSIGNED') {
+                    actionsHtml += `<a href="/verification.html?orderId=${orderId}" class="btn btn-primary">📸 Verify Order</a> `;
+                }
+                if (o.status === 'VERIFIED' && role === 'FARMER') {
+                    actionsHtml += `<button onclick="confirmOrder(true)" class="btn btn-primary">✅ Confirm</button> `;
+                    actionsHtml += `<button onclick="confirmOrder(false)" class="btn btn-danger">❌ Reject</button> `;
+                }
+                if (o.status === 'FARMER_CONFIRMED') {
+                    actionsHtml += `<button onclick="updateStatus('IN_TRANSIT')" class="btn btn-primary">🚚 Mark In Transit</button> `;
+                }
+                if (o.status === 'IN_TRANSIT') {
+                    actionsHtml += `<button onclick="updateStatus('DELIVERED')" class="btn btn-primary">📦 Mark Delivered</button> `;
+                }
+                if (o.status === 'DELIVERED') {
+                    actionsHtml += `<button onclick="settlePayment()" class="btn btn-primary">💰 Settle Payment</button> `;
+                }
+                actionsHtml += `<button onclick="raiseDispute()" class="btn btn-sm btn-danger">🛡️ Raise Dispute</button>`;
+
+                document.getElementById('orderContent').innerHTML = `
+                    <div class="glass-card">
+                        ${renderStatusTimeline(o.status)}
+                    </div>
+
+                    <div class="glass-card mt-6">
+                        <h2 class="section-title">Order Information</h2>
+                        <div class="grid-2">
+                            <div><span class="text-muted">Crop:</span> <strong style="font-size:18px;">${o.cropName}</strong></div>
+                            <div><span class="text-muted">Status:</span> ${getStatusBadge(o.status)}</div>
+                            <div><span class="text-muted">Quantity:</span> <strong>${o.quantity} kg</strong></div>
+                            <div><span class="text-muted">Price/kg:</span> <strong>${formatCurrency(o.unitPrice)}</strong></div>
+                            <div><span class="text-muted">Total Price:</span> <strong style="color:var(--primary); font-size:20px;">${formatCurrency(o.totalPrice)}</strong></div>
+                            <div><span class="text-muted">Order Date:</span> ${formatDateTime(o.createdAt)}</div>
+                            <div><span class="text-muted">Farmer:</span> ${o.farmerName || '—'}</div>
+                            <div><span class="text-muted">Kitchen:</span> ${o.kitchenName || '—'}</div>
+                        </div>
+                    </div>
+
+                    ${verifyHtml}
+                    ${deliveryHtml}
+
+                    <div class="mt-6" style="display:flex; gap:12px; flex-wrap:wrap;">
+                        ${actionsHtml}
+                    </div>
+                `;
+            } catch(e) { showToast(e.message, 'error'); }
+        }
+
+        async function assignDelivery() {
+            try {
+                await apiPost(`/api/delivery/assign/${orderId}`, {});
+                showToast('Delivery assigned!');
+                loadOrder();
+            } catch(e) { showToast(e.message, 'error'); }
+        }
+
+        async function confirmOrder(confirmed) {
+            try {
+                await apiPost(`/api/orders/${orderId}/farmer-confirm`, { confirmed, reason: confirmed ? '' : 'Rejected by farmer' });
+                showToast(confirmed ? 'Order confirmed!' : 'Order rejected');
+                loadOrder();
+            } catch(e) { showToast(e.message, 'error'); }
+        }
+
+        async function updateStatus(status) {
+            try {
+                await apiPut(`/api/orders/${orderId}/status`, { status });
+                showToast('Status updated!');
+                loadOrder();
+            } catch(e) { showToast(e.message, 'error'); }
+        }
+
+        async function settlePayment() {
+            try {
+                await apiPost(`/api/payments/settle/${orderId}`, {});
+                showToast('Payment settled!');
+                loadOrder();
+            } catch(e) { showToast(e.message, 'error'); }
+        }
+
+        function raiseDispute() {
+            const reason = prompt('Describe the issue:');
+            if (!reason) return;
+            apiPost('/api/disputes', { orderId, reason, comment: reason })
+                .then(() => { showToast('Dispute raised'); loadOrder(); })
+                .catch(e => showToast(e.message, 'error'));
+        }
+
+        loadOrder();
+    </script>
+</body>
+</html>

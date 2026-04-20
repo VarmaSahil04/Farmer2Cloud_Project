@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Farmer Dashboard — FarmToCloud</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <nav class="navbar" id="navbar"></nav>
+
+    <div class="page-wrapper">
+        <div class="flex-between mb-6">
+            <div>
+                <h1 style="font-size:28px; font-weight:800;">👨‍🌾 Farmer Dashboard</h1>
+                <p class="text-muted" id="welcomeMsg">Welcome back!</p>
+            </div>
+            <a href="/crop-listing.html" class="btn btn-primary">+ Add Crop Listing</a>
+        </div>
+
+        <!-- Stats Row -->
+        <div class="grid-4 mb-6" id="statsRow">
+            <div class="stat-card"><div class="stat-icon" style="background:var(--gradient-1);">📦</div><div><div class="stat-value" id="totalOrders">—</div><div class="stat-label">Total Orders</div></div></div>
+            <div class="stat-card"><div class="stat-icon" style="background:var(--gradient-2);">⭐</div><div><div class="stat-value" id="trustScore">—</div><div class="stat-label">Trust Score</div></div></div>
+            <div class="stat-card"><div class="stat-icon" style="background:var(--gradient-3);">✅</div><div><div class="stat-value" id="successRate">—</div><div class="stat-label">Success Rate</div></div></div>
+            <div class="stat-card"><div class="stat-icon" style="background:linear-gradient(135deg,#EC4899,#F43F5E);">💰</div><div><div class="stat-value" id="totalEarnings">—</div><div class="stat-label">Total Earnings</div></div></div>
+        </div>
+
+        <!-- Trust Badge -->
+        <div class="mb-6" id="trustBadgeArea"></div>
+
+        <!-- My Crop Listings -->
+        <div class="glass-card mb-6">
+            <div class="flex-between mb-4">
+                <h2 class="section-title" style="margin-bottom:0;">🌾 My Crop Listings</h2>
+                <a href="/crop-listing.html" class="btn btn-sm btn-outline">Manage Listings</a>
+            </div>
+            <div id="cropListings"><p class="text-muted">Loading...</p></div>
+        </div>
+
+        <!-- Recent Orders -->
+        <div class="glass-card mb-6">
+            <h2 class="section-title">📋 Recent Orders</h2>
+            <div id="ordersList"><p class="text-muted">Loading...</p></div>
+        </div>
+
+        <!-- Demand Insights -->
+        <div class="glass-card mb-6">
+            <h2 class="section-title">🔥 Demand Insights</h2>
+            <div id="demandHeatmap" class="heatmap-grid"><p class="text-muted">Loading...</p></div>
+        </div>
+
+        <!-- Payment History -->
+        <div class="glass-card">
+            <h2 class="section-title">💰 Recent Payments</h2>
+            <div id="payments"><p class="text-muted">Loading...</p></div>
+        </div>
+    </div>
+
+    <!-- Order Detail Modal -->
+    <div class="modal-overlay" id="orderModal">
+        <div class="modal-content">
+            <div class="flex-between mb-4">
+                <h3 style="font-size:18px; font-weight:700;">Order Details</h3>
+                <button onclick="closeModal()" class="btn btn-sm" style="background:var(--dark-border);">✕</button>
+            </div>
+            <div id="orderModalBody"></div>
+        </div>
+    </div>
+
+    <script src="/js/app.js"></script>
+    <script>
+        if (!requireRole('FARMER')) throw 'unauthorized';
+
+        async function loadDashboard() {
+            try {
+                const res = await apiGet('/api/farmer/dashboard');
+                const d = res.data;
+                const farmer = d.farmer;
+
+                document.getElementById('welcomeMsg').textContent = `Welcome, ${farmer.name}!`;
+                document.getElementById('totalOrders').textContent = d.totalOrders || 0;
+                document.getElementById('trustScore').textContent = (farmer.trustScore || 0).toFixed(1) + '/5';
+                document.getElementById('successRate').textContent = (farmer.deliverySuccessRate || 0).toFixed(0) + '%';
+
+                const totalEarnings = (d.payments || []).filter(p => p.status === 'PAID').reduce((s, p) => s + p.amount, 0);
+                document.getElementById('totalEarnings').textContent = formatCurrency(totalEarnings);
+
+                // Trust badge
+                document.getElementById('trustBadgeArea').innerHTML = farmer.verified
+                    ? '<div class="trust-badge verified">✔️ Verified Farmer — Trusted Seller</div>'
+                    : '<div class="trust-badge unverified">📝 Complete 5+ orders with 80%+ success to get verified badge</div>';
+
+                // Crop listings
+                renderCropListings(d.orders);
+                renderOrders(d.orders || []);
+                renderDemand(d.demandInsights || []);
+                renderPayments(d.payments || []);
+            } catch (err) {
+                showToast('Failed to load dashboard: ' + err.message, 'error');
+            }
+        }
+
+        async function renderCropListings() {
+            try {
+                const res = await apiGet('/api/crops/farmer');
+                const crops = res.data || [];
+                const el = document.getElementById('cropListings');
+                if (!crops.length) { el.innerHTML = '<p class="text-muted">No listings yet. Add your first crop!</p>'; return; }
+
+                el.innerHTML = `<table class="data-table"><thead><tr><th>Crop</th><th>Qty (kg)</th><th>Your Price</th><th>Market Price</th><th>Fair Price</th><th>Demand</th><th>Status</th></tr></thead><tbody>` +
+                    crops.map(c => `<tr>
+                        <td><strong>${c.cropName}</strong></td>
+                        <td>${c.quantity}</td>
+                        <td>${formatCurrency(c.pricePerKg)}</td>
+                        <td>${formatCurrency(c.marketPrice)}</td>
+                        <td style="color:var(--primary);font-weight:600;">${formatCurrency(c.suggestedFairPrice)}</td>
+                        <td>${getDemandEmoji(c.demandLevel)} ${c.demandLevel}</td>
+                        <td>${getStatusBadge(c.status)}</td>
+                    </tr>`).join('') + '</tbody></table>';
+            } catch(e) {
+                document.getElementById('cropListings').innerHTML = '<p class="text-muted">Could not load listings.</p>';
+            }
+        }
+
+        function renderOrders(orders) {
+            const el = document.getElementById('ordersList');
+            if (!orders.length) { el.innerHTML = '<p class="text-muted">No orders yet.</p>'; return; }
+
+            el.innerHTML = `<table class="data-table"><thead><tr><th>Crop</th><th>Kitchen</th><th>Qty</th><th>Total</th><th>Status</th><th>Action</th></tr></thead><tbody>` +
+                orders.slice(0, 10).map(o => `<tr>
+                    <td>${o.cropName}</td>
+                    <td>${o.kitchenName || '—'}</td>
+                    <td>${o.quantity} kg</td>
+                    <td>${formatCurrency(o.totalPrice)}</td>
+                    <td>${getStatusBadge(o.status)}</td>
+                    <td><button class="btn btn-sm btn-outline" onclick="viewOrder('${o.id}')">View</button>
+                        ${o.status === 'VERIFIED' ? `<button class="btn btn-sm btn-primary" onclick="confirmOrder('${o.id}', true)" style="margin-left:4px;">✅ Confirm</button>
+                        <button class="btn btn-sm btn-danger" onclick="confirmOrder('${o.id}', false)" style="margin-left:4px;">❌ Reject</button>` : ''}
+                    </td>
+                </tr>`).join('') + '</tbody></table>';
+        }
+
+        function renderDemand(demand) {
+            const el = document.getElementById('demandHeatmap');
+            if (!demand.length) { el.innerHTML = '<p class="text-muted">No demand data yet. Data builds as orders flow through the system.</p>'; return; }
+            el.innerHTML = demand.map(d => `
+                <div class="heatmap-cell heatmap-${d.demandLevel.toLowerCase()}">
+                    <div class="heatmap-emoji">${getDemandEmoji(d.demandLevel)}</div>
+                    <div class="heatmap-crop">${d.cropName}</div>
+                    <div class="heatmap-count">${d.orderCount} orders • ${formatCurrency(d.avgPrice)}/kg</div>
+                </div>
+            `).join('');
+        }
+
+        function renderPayments(payments) {
+            const el = document.getElementById('payments');
+            if (!payments.length) { el.innerHTML = '<p class="text-muted">No payments yet.</p>'; return; }
+            el.innerHTML = `<table class="data-table"><thead><tr><th>Transaction</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead><tbody>` +
+                payments.slice(0, 5).map(p => `<tr>
+                    <td>${p.transactionId || '—'}</td>
+                    <td style="font-weight:700;">${formatCurrency(p.amount)}</td>
+                    <td>${getStatusBadge(p.status)}</td>
+                    <td>${p.paidAt ? formatDateTime(p.paidAt) : '—'}</td>
+                </tr>`).join('') + '</tbody></table>';
+        }
+
+        async function viewOrder(id) {
+            try {
+                const res = await apiGet(`/api/orders/${id}`);
+                const o = res.data;
+                let verifyHtml = '';
+                try { const v = await apiGet(`/api/verify/${id}`); verifyHtml = `<div class="mt-4 glass-card"><h4>📸 Verification Proof</h4><p>Weight: <strong>${v.data.verifiedWeight} kg</strong></p><p>By: ${v.data.verifiedBy || '—'}</p><p>Notes: ${v.data.qualityNotes || '—'}</p></div>`; } catch(e) {}
+
+                document.getElementById('orderModalBody').innerHTML = `
+                    ${renderStatusTimeline(o.status)}
+                    <div class="grid-2 mt-4">
+                        <div><span class="text-muted">Crop:</span> <strong>${o.cropName}</strong></div>
+                        <div><span class="text-muted">Quantity:</span> <strong>${o.quantity} kg</strong></div>
+                        <div><span class="text-muted">Unit Price:</span> <strong>${formatCurrency(o.unitPrice)}</strong></div>
+                        <div><span class="text-muted">Total:</span> <strong>${formatCurrency(o.totalPrice)}</strong></div>
+                        <div><span class="text-muted">Kitchen:</span> ${o.kitchenName || '—'}</div>
+                        <div><span class="text-muted">Date:</span> ${formatDateTime(o.createdAt)}</div>
+                    </div>
+                    ${verifyHtml}
+                    <div class="flex-between mt-4">
+                        <a href="/order-detail.html?id=${o.id}" class="btn btn-primary" style="margin-right: 8px;">View Full Details / Assign Delivery</a>
+                        <button class="btn btn-sm btn-danger" onclick="raiseDispute('${o.id}')">🛡️ Raise Dispute</button>
+                    </div>
+                `;
+                document.getElementById('orderModal').classList.add('active');
+            } catch(err) { showToast(err.message, 'error'); }
+        }
+
+        function closeModal() { document.getElementById('orderModal').classList.remove('active'); }
+
+        async function confirmOrder(id, confirmed) {
+            try {
+                await apiPost(`/api/orders/${id}/farmer-confirm`, { confirmed, reason: confirmed ? '' : 'Rejected by farmer' });
+                showToast(confirmed ? 'Order confirmed!' : 'Order rejected');
+                loadDashboard();
+            } catch(e) { showToast(e.message, 'error'); }
+        }
+
+        function raiseDispute(orderId) {
+            const reason = prompt('Describe the issue:');
+            if (!reason) return;
+            apiPost('/api/disputes', { orderId, reason, comment: reason })
+                .then(() => showToast('Dispute raised successfully'))
+                .catch(e => showToast(e.message, 'error'));
+        }
+
+        loadDashboard();
+    </script>
+</body>
+</html>

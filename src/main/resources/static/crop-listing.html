@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Crop Listings — FarmToCloud</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <nav class="navbar" id="navbar"></nav>
+
+    <div class="page-wrapper">
+        <div class="flex-between mb-6">
+            <h1 style="font-size:28px; font-weight:800;">🌾 Manage Crop Listings</h1>
+            <button onclick="openAddModal()" class="btn btn-primary">+ Add New Crop</button>
+        </div>
+
+        <!-- Price Engine Demo -->
+        <div class="glass-card mb-6">
+            <h2 class="section-title">💰 Smart Price Engine</h2>
+            <p class="text-muted mb-4" style="font-size:14px;">Check if your price is fair using our smart pricing engine</p>
+            <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:end;">
+                <div class="form-group" style="margin-bottom:0; flex:1; min-width:150px;">
+                    <label>Your Price (₹/kg)</label>
+                    <input type="number" id="priceEngFarmer" class="form-control" placeholder="e.g., 25">
+                </div>
+                <div class="form-group" style="margin-bottom:0; flex:1; min-width:150px;">
+                    <label>Market Price (₹/kg)</label>
+                    <input type="number" id="priceEngMarket" class="form-control" placeholder="e.g., 30">
+                </div>
+                <button onclick="checkPrice()" class="btn btn-sm btn-primary">Analyze</button>
+            </div>
+            <div id="priceResult" class="mt-4"></div>
+        </div>
+
+        <!-- Listings Table -->
+        <div class="glass-card">
+            <h2 class="section-title">📋 Your Listings</h2>
+            <div id="listingsTable"><p class="text-muted">Loading...</p></div>
+        </div>
+    </div>
+
+    <!-- Add/Edit Modal -->
+    <div class="modal-overlay" id="cropModal">
+        <div class="modal-content">
+            <div class="flex-between mb-4">
+                <h3 style="font-size:18px; font-weight:700;" id="modalTitle">Add Crop Listing</h3>
+                <button onclick="closeCropModal()" class="btn btn-sm" style="background:var(--dark-border);">✕</button>
+            </div>
+            <form id="cropForm">
+                <input type="hidden" id="editId">
+                <div class="form-group">
+                    <label>Crop Name</label>
+                    <input type="text" id="cropName" class="form-control" placeholder="e.g., Tomato" required>
+                </div>
+                <div class="form-group">
+                    <label>Quantity (kg)</label>
+                    <input type="number" id="quantity" class="form-control" placeholder="e.g., 500" required min="1">
+                </div>
+                <div class="form-group">
+                    <label>Price per kg (₹)</label>
+                    <input type="number" id="pricePerKg" class="form-control" placeholder="e.g., 25" required min="1" step="0.5">
+                </div>
+                <div class="form-group">
+                    <label>Market Price (₹/kg) — optional</label>
+                    <input type="number" id="marketPrice" class="form-control" placeholder="Leave blank for auto-calc" step="0.5">
+                </div>
+                <div class="form-group">
+                    <label>Available Date</label>
+                    <input type="date" id="availableDate" class="form-control">
+                </div>
+                <button type="submit" class="btn btn-primary" style="width:100%;" id="submitBtn">Add Listing</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="/js/app.js"></script>
+    <script>
+        if (!requireRole('FARMER')) throw 'unauthorized';
+
+        async function loadListings() {
+            try {
+                const res = await apiGet('/api/crops/farmer');
+                const crops = res.data || [];
+                const el = document.getElementById('listingsTable');
+                if (!crops.length) { el.innerHTML = '<p class="text-muted">No listings. Click "Add New Crop" to get started!</p>'; return; }
+
+                el.innerHTML = `<table class="data-table"><thead><tr><th>Crop</th><th>Qty</th><th>Your Price</th><th>Market</th><th>Fair Price</th><th>Demand</th><th>Status</th><th>Actions</th></tr></thead><tbody>` +
+                    crops.map(c => `<tr>
+                        <td><strong>${c.cropName}</strong></td>
+                        <td>${c.quantity} kg</td>
+                        <td>${formatCurrency(c.pricePerKg)}</td>
+                        <td>${formatCurrency(c.marketPrice)}</td>
+                        <td style="color:var(--primary);font-weight:600;">${formatCurrency(c.suggestedFairPrice)}</td>
+                        <td>${getDemandEmoji(c.demandLevel)} ${c.demandLevel}</td>
+                        <td>${getStatusBadge(c.status)}</td>
+                        <td>
+                            <button class="btn btn-sm btn-outline" onclick="editCrop('${c.id}','${c.cropName}',${c.quantity},${c.pricePerKg},${c.marketPrice || 0})">✏️</button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteCrop('${c.id}')" style="margin-left:4px;">🗑️</button>
+                        </td>
+                    </tr>`).join('') + '</tbody></table>';
+            } catch(e) { showToast(e.message, 'error'); }
+        }
+
+        function openAddModal() {
+            document.getElementById('modalTitle').textContent = 'Add Crop Listing';
+            document.getElementById('submitBtn').textContent = 'Add Listing';
+            document.getElementById('cropForm').reset();
+            document.getElementById('editId').value = '';
+            document.getElementById('cropModal').classList.add('active');
+        }
+
+        function editCrop(id, name, qty, price, market) {
+            document.getElementById('modalTitle').textContent = 'Edit Crop Listing';
+            document.getElementById('submitBtn').textContent = 'Update Listing';
+            document.getElementById('editId').value = id;
+            document.getElementById('cropName').value = name;
+            document.getElementById('quantity').value = qty;
+            document.getElementById('pricePerKg').value = price;
+            document.getElementById('marketPrice').value = market || '';
+            document.getElementById('cropModal').classList.add('active');
+        }
+
+        function closeCropModal() { document.getElementById('cropModal').classList.remove('active'); }
+
+        document.getElementById('cropForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const editId = document.getElementById('editId').value;
+            const body = {
+                cropName: document.getElementById('cropName').value,
+                quantity: parseFloat(document.getElementById('quantity').value),
+                pricePerKg: parseFloat(document.getElementById('pricePerKg').value),
+                marketPrice: document.getElementById('marketPrice').value ? parseFloat(document.getElementById('marketPrice').value) : null,
+                availableDate: document.getElementById('availableDate').value || null
+            };
+
+            try {
+                if (editId) {
+                    await apiPut(`/api/crops/${editId}`, body);
+                    showToast('Listing updated!');
+                } else {
+                    await apiPost('/api/crops', body);
+                    showToast('Listing created!');
+                }
+                closeCropModal();
+                loadListings();
+            } catch(e) { showToast(e.message, 'error'); }
+        });
+
+        async function deleteCrop(id) {
+            if (!confirm('Delete this listing?')) return;
+            try {
+                await apiDelete(`/api/crops/${id}`);
+                showToast('Listing deleted');
+                loadListings();
+            } catch(e) { showToast(e.message, 'error'); }
+        }
+
+        async function checkPrice() {
+            const fp = parseFloat(document.getElementById('priceEngFarmer').value);
+            const mp = parseFloat(document.getElementById('priceEngMarket').value);
+            if (!fp || !mp) { showToast('Enter both prices', 'error'); return; }
+
+            try {
+                const res = await apiGet(`/api/intelligence/price-compare?farmerPrice=${fp}&marketPrice=${mp}`);
+                const d = res.data;
+                document.getElementById('priceResult').innerHTML = `
+                    <div class="price-compare">
+                        <div class="price-item"><div class="price-label">Your Price</div><div class="price-value">${formatCurrency(d.farmerPrice)}</div></div>
+                        <div class="price-item"><div class="price-label">Market Price</div><div class="price-value">${formatCurrency(d.marketPrice)}</div></div>
+                        <div class="price-item" style="border-color:var(--primary);"><div class="price-label" style="color:var(--primary);">Fair Price</div><div class="price-value" style="color:var(--primary);">${formatCurrency(d.suggestedFairPrice)}</div></div>
+                    </div>
+                    <div class="mt-4 text-center" style="font-size:15px; font-weight:600; padding:12px; border-radius:10px; background:rgba(255,255,255,0.03);">${d.verdict}</div>
+                `;
+            } catch(e) { showToast(e.message, 'error'); }
+        }
+
+        loadListings();
+    </script>
+</body>
+</html>

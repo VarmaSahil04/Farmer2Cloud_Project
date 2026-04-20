@@ -1,0 +1,14 @@
+spring:
+  profiles:
+    active: dev
+  data:
+    mongodb:
+      auto-index-creation: true
+
+server:
+  port: 8080
+
+app:
+  jwt:
+    secret: farmToCloudSuperSecretKeyThatIsLongEnoughForHS256Algorithm2024
+    expiration-ms: 86400000

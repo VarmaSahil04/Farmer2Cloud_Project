@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verification — FarmToCloud</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <nav class="navbar" id="navbar"></nav>
+
+    <div class="page-wrapper">
+        <div class="flex-between mb-6">
+            <h1 style="font-size:28px; font-weight:800;">📸 Delivery Verification</h1>
+            <a href="javascript:history.back()" class="btn btn-sm btn-outline">← Back</a>
+        </div>
+
+        <div class="glass-card" style="max-width:600px;">
+            <p class="text-muted mb-4">Delivery partner verifies the crop weight and uploads photo proof at the farmer's location.</p>
+
+            <form id="verifyForm">
+                <div class="form-group">
+                    <label for="verifiedWeight">Verified Weight (kg) ⚖️</label>
+                    <input type="number" id="verifiedWeight" class="form-control" placeholder="Enter actual weight" step="0.1" required min="0.1">
+                </div>
+                <div class="form-group">
+                    <label for="imageProofUrl">Crop Image URL 📸</label>
+                    <input type="text" id="imageProofUrl" class="form-control" placeholder="Paste image URL or path">
+                    <small class="text-muted">Upload a photo of the crop at pickup point</small>
+                </div>
+                <div class="form-group">
+                    <label for="qualityNotes">Quality Notes</label>
+                    <textarea id="qualityNotes" class="form-control" rows="3" placeholder="Fresh, good quality, no damage..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="verifiedBy">Verified By (Partner Name)</label>
+                    <input type="text" id="verifiedBy" class="form-control" placeholder="Delivery partner name">
+                </div>
+                <button type="submit" class="btn btn-primary" style="width:100%;" id="submitBtn">
+                    ✅ Submit Verification
+                </button>
+            </form>
+        </div>
+
+        <div class="glass-card mt-6" id="existingVerification" style="max-width:600px; display:none;">
+            <h2 class="section-title">✅ Existing Verification</h2>
+            <div id="verificationDetails"></div>
+        </div>
+    </div>
+
+    <script src="/js/app.js"></script>
+    <script>
+        if (!requireAuth()) throw 'unauthorized';
+
+        const orderId = new URLSearchParams(window.location.search).get('orderId');
+        if (!orderId) { showToast('No order ID provided', 'error'); throw 'no id'; }
+
+        // Check if already verified
+        async function checkVerification() {
+            try {
+                const res = await apiGet(`/api/verify/${orderId}`);
+                const v = res.data;
+                document.getElementById('existingVerification').style.display = 'block';
+                document.getElementById('verificationDetails').innerHTML = `
+                    <div class="grid-2">
+                        <div><span class="text-muted">Weight:</span> <strong>${v.verifiedWeight} kg</strong></div>
+                        <div><span class="text-muted">Verified By:</span> <strong>${v.verifiedBy || '—'}</strong></div>
+                        <div><span class="text-muted">Notes:</span> ${v.qualityNotes || '—'}</div>
+                        <div><span class="text-muted">Date:</span> ${formatDateTime(v.verifiedAt)}</div>
+                    </div>
+                `;
+            } catch(e) { /* not yet verified, form is shown */ }
+        }
+
+        document.getElementById('verifyForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('submitBtn');
+            btn.textContent = 'Submitting...';
+            btn.disabled = true;
+
+            try {
+                await apiPost(`/api/verify/${orderId}`, {
+                    verifiedWeight: parseFloat(document.getElementById('verifiedWeight').value),
+                    imageProofUrl: document.getElementById('imageProofUrl').value,
+                    qualityNotes: document.getElementById('qualityNotes').value,
+                    verifiedBy: document.getElementById('verifiedBy').value
+                });
+                showToast('Verification submitted!');
+                setTimeout(() => window.location.href = `/order-detail.html?id=${orderId}`, 1000);
+            } catch(err) {
+                showToast(err.message, 'error');
+                btn.textContent = '✅ Submit Verification';
+                btn.disabled = false;
+            }
+        });
+
+        checkVerification();
+    </script>
+</body>
+</html>

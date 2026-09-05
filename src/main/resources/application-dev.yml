@@ -1,4 +1,14 @@
 spring:
   data:
     mongodb:
-      uri: mongodb+srv://<username>:<password>@<cluster>.mongodb.net/farmtocloud?retryWrites=true&w=majority
+      uri: mongodb+srv://stsahilvarma04_db_user:82vdtB9DSPb2gLVD@cluster0.xufvgz0.mongodb.net/?appName=Cluster0
+      database: farmtocloud
+      auto-index-creation: true
+
+server:
+  port: 8080
+
+app:
+  jwt:
+    secret: farmToCloudSuperSecretKeyThatIsLongEnoughForHS256Algorithm2024
+    expiration-ms: 86400000

@@ -9,3 +9,4 @@ public class FarmToCloudApplication {
         SpringApplication.run(FarmToCloudApplication.class, args);
     }
 }
+

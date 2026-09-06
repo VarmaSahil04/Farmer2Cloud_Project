@@ -132,7 +132,7 @@
 
             try {
                 await apiPost('/api/auth/signup', body);
-                showToast('Account created! Please login.');
+                showToast('Account created! Please login. Check your email for a welcome message.');
                 setTimeout(() => window.location.href = '/login.html', 1000);
             } catch (err) {
                 showToast(err.message, 'error');

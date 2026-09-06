@@ -163,7 +163,7 @@
             if (!qty || qty <= 0) { showToast('Enter valid quantity', 'error'); return; }
             try {
                 await apiPost('/api/orders', { cropListingId: cropId, quantity: qty });
-                showToast('Order placed successfully!');
+                showToast('Order placed successfully! Confirmation email sent.');
                 closeModal();
                 loadDashboard();
                 loadCrops();

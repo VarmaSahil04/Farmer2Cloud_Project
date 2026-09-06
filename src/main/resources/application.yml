@@ -4,20 +4,6 @@ spring:
   data:
     mongodb:
       auto-index-creation: true
-  mail:
-    host: smtp.gmail.com
-    port: 587
-    username: ${GMAIL_USERNAME}
-    password: ${GMAIL_APP_PASSWORD}
-    properties:
-      mail:
-        smtp:
-          auth: true
-          starttls:
-            enable: true
-          connectiontimeout: 5000
-          timeout: 5000
-          writetimeout: 5000
 
 server:
   port: ${PORT:8080}
@@ -26,6 +12,8 @@ app:
   jwt:
     secret: ${JWT_SECRET:farmToCloudSuperSecretKeyThatIsLongEnoughForHS256Algorithm2024}
     expiration-ms: 86400000
+  brevo:
+    api-key: ${BREVO_API_KEY}
   mail:
-    from: ${GMAIL_USERNAME}
+    from: ${MAIL_FROM_ADDRESS}
     from-name: Farm To Cloud Kitchen

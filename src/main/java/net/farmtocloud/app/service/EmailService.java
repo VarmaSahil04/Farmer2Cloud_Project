@@ -16,18 +16,6 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 
-/**
- * Sends transactional emails for account and order events via Brevo's HTTPS API,
- * using the JDK's built-in HttpClient — no third-party mail SDK dependency needed.
- *
- * Brevo (over HTTPS, port 443) is used instead of raw SMTP because most free-tier
- * hosts (Render, Railway, etc.) block outbound SMTP ports (25/465/587) to prevent
- * spam abuse. HTTPS is never blocked, since it's the same port normal web traffic uses.
- *
- * All sends are async and swallow their own exceptions — a bad API key or a
- * Brevo outage should never block or fail the request that triggered the
- * email (signup, order status update, etc.).
- */
 @Service
 @Slf4j
 public class EmailService {
@@ -101,11 +89,9 @@ public class EmailService {
 
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
-            // Brevo returns 201 Created on success, with the message ID in the body.
             if (response.statusCode() == 200 || response.statusCode() == 201 || response.statusCode() == 202) {
                 log.info("Email sent to {} — subject: {} (status {})", to, subject, response.statusCode());
             } else {
-                // Never let email failures break the calling business flow
                 log.error("Brevo rejected email to {} — subject: {}. Status: {}, Body: {}",
                         to, subject, response.statusCode(), response.body());
             }
@@ -114,11 +100,6 @@ public class EmailService {
         }
     }
 
-    /**
-     * Builds the JSON body for Brevo's /v3/smtp/email endpoint using Jackson,
-     * so subject/body text is always correctly JSON-escaped regardless of content
-     * (quotes, backslashes, newlines, unicode) — no manual string escaping needed.
-     */
     private String buildBrevoPayload(String to, String subject, String body) throws Exception {
         ObjectNode root = objectMapper.createObjectNode();
 
@@ -134,7 +115,6 @@ public class EmailService {
         root.set("to", toArray);
 
         root.put("subject", subject);
-        // Sending as plain text wrapped in <pre> so line breaks render correctly as HTML content.
         root.put("htmlContent", "<pre style=\"font-family:inherit; white-space:pre-wrap;\">" + escapeHtml(body) + "</pre>");
 
         return objectMapper.writeValueAsString(root);

@@ -65,4 +65,8 @@ public class User {
 
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+
+    // Password reset
+    private String resetToken;
+    private LocalDateTime resetTokenExpiry;
 }

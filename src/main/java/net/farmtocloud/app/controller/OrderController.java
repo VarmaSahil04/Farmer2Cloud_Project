@@ -21,7 +21,7 @@ public class OrderController {
 
     @PostMapping
     public ResponseEntity<ApiResponse> placeOrder(Authentication auth,
-                                                   @Valid @RequestBody OrderRequest request) {
+                                                  @Valid @RequestBody OrderRequest request) {
         try {
             Order order = orderService.placeOrder(auth.getName(), request);
             return ResponseEntity.ok(ApiResponse.success("Order placed successfully", order));
@@ -60,7 +60,7 @@ public class OrderController {
 
     @PutMapping("/{id}/status")
     public ResponseEntity<ApiResponse> updateStatus(@PathVariable String id,
-                                                     @RequestBody Map<String, String> body) {
+                                                    @RequestBody Map<String, String> body) {
         try {
             Order order = orderService.updateStatus(id, body.get("status"));
             return ResponseEntity.ok(ApiResponse.success("Status updated", order));
@@ -71,7 +71,7 @@ public class OrderController {
 
     @PostMapping("/{id}/farmer-confirm")
     public ResponseEntity<ApiResponse> farmerConfirm(@PathVariable String id,
-                                                      @RequestBody Map<String, Object> body) {
+                                                     @RequestBody Map<String, Object> body) {
         try {
             boolean confirmed = (boolean) body.getOrDefault("confirmed", false);
             String reason = (String) body.getOrDefault("reason", "");

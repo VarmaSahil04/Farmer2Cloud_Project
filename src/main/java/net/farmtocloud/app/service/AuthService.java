@@ -12,6 +12,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Service
 @Slf4j
@@ -25,6 +26,9 @@ public class AuthService {
 
     @Autowired
     private JwtTokenProvider jwtTokenProvider;
+
+    @Autowired
+    private EmailService emailService;
 
     public User signup(SignupRequest request) {
         if (userRepository.existsByEmail(request.getEmail())) {
@@ -52,6 +56,9 @@ public class AuthService {
 
         User savedUser = userRepository.save(user);
         log.info("User registered: {} as {}", savedUser.getEmail(), savedUser.getRole());
+
+        emailService.sendWelcomeEmail(savedUser);
+
         return savedUser;
     }
 
@@ -74,5 +81,39 @@ public class AuthService {
                 .email(user.getEmail())
                 .role(user.getRole())
                 .build();
+    }
+
+    /**
+     * Generates a reset token valid for 30 minutes and emails it to the user.
+     * Always succeeds silently even if the email doesn't exist — this avoids
+     * leaking which emails are registered to an attacker probing the endpoint.
+     */
+    public void forgotPassword(String email) {
+        userRepository.findByEmail(email).ifPresentOrElse(user -> {
+            String token = UUID.randomUUID().toString();
+            user.setResetToken(token);
+            user.setResetTokenExpiry(LocalDateTime.now().plusMinutes(30));
+            userRepository.save(user);
+
+            emailService.sendPasswordResetEmail(user, token);
+            log.info("Password reset token generated for: {}", email);
+        }, () -> log.info("Password reset requested for unknown email: {}", email));
+    }
+
+    public void resetPassword(String token, String newPassword) {
+        User user = userRepository.findByResetToken(token)
+                .orElseThrow(() -> new RuntimeException("Invalid or expired reset token"));
+
+        if (user.getResetTokenExpiry() == null || user.getResetTokenExpiry().isBefore(LocalDateTime.now())) {
+            throw new RuntimeException("Reset token has expired. Please request a new one.");
+        }
+
+        user.setPassword(passwordEncoder.encode(newPassword));
+        user.setResetToken(null);
+        user.setResetTokenExpiry(null);
+        user.setUpdatedAt(LocalDateTime.now());
+        userRepository.save(user);
+
+        log.info("Password reset successfully for: {}", user.getEmail());
     }
 }

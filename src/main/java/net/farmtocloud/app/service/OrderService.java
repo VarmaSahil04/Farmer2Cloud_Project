@@ -20,9 +20,6 @@ public class OrderService {
     private OrderRepository orderRepository;
 
     @Autowired
-    private net.farmtocloud.app.repository.NotificationRepository notificationRepository;
-
-    @Autowired
     private CropListingService cropListingService;
 
     @Autowired
@@ -30,6 +27,9 @@ public class OrderService {
 
     @Autowired
     private IntelligenceService intelligenceService;
+
+    @Autowired
+    private EmailService emailService;
 
     public Order placeOrder(String kitchenId, OrderRequest request) {
         User kitchen = userService.getUserById(kitchenId);
@@ -72,14 +72,10 @@ public class OrderService {
         intelligenceService.recordOrder(listing.getCropName(), listing.getFarmerLocation(), listing.getPricePerKg());
 
         Order saved = orderRepository.save(order);
-        
-        notificationRepository.save(net.farmtocloud.app.entity.Notification.builder()
-            .userId(listing.getFarmerId())
-            .message("New order arrived from " + order.getKitchenName() + " for " + request.getQuantity() + "kg of " + listing.getCropName())
-            .type("ORDER_ARRIVED")
-            .build());
-            
         log.info("Order placed: {} by kitchen {}", saved.getId(), kitchenId);
+
+        notifyOrderStatusChange(saved);
+
         return saved;
     }
 
@@ -96,9 +92,12 @@ public class OrderService {
         return orderRepository.findByKitchenId(kitchenId);
     }
 
+    /**
+     * Orders currently active in the delivery pipeline —
+     * assigned for pickup or already in transit.
+     */
     public List<Order> getDeliveryOrders() {
-        return orderRepository.findByStatusIn(java.util.Arrays.asList(
-                "PICKUP_ASSIGNED", "VERIFIED", "FARMER_CONFIRMED", "IN_TRANSIT"));
+        return orderRepository.findByStatusIn(List.of("PICKUP_ASSIGNED", "IN_TRANSIT"));
     }
 
     public Order updateStatus(String orderId, String newStatus) {
@@ -109,15 +108,31 @@ public class OrderService {
             order.setDeliveredAt(LocalDateTime.now());
         }
         Order saved = orderRepository.save(order);
-        
-        notificationRepository.save(net.farmtocloud.app.entity.Notification.builder()
-            .userId(order.getKitchenId())
-            .message("Order for " + order.getCropName() + " status updated to " + newStatus)
-            .type("STATUS_UPDATE")
-            .build());
-            
         log.info("Order {} status updated to {}", orderId, newStatus);
+
+        notifyOrderStatusChange(saved);
+
         return saved;
+    }
+
+    /**
+     * Emails both the farmer and the kitchen whenever an order's status changes.
+     * Failures here are logged inside EmailService and never propagate —
+     * a bad SMTP config should never break an order status update.
+     */
+    private void notifyOrderStatusChange(Order order) {
+        try {
+            User farmer = userService.getUserById(order.getFarmerId());
+            emailService.sendOrderStatusEmail(order, farmer.getEmail(), farmer.getName());
+        } catch (Exception e) {
+            log.warn("Could not notify farmer for order {}: {}", order.getId(), e.getMessage());
+        }
+        try {
+            User kitchen = userService.getUserById(order.getKitchenId());
+            emailService.sendOrderStatusEmail(order, kitchen.getEmail(), kitchen.getName());
+        } catch (Exception e) {
+            log.warn("Could not notify kitchen for order {}: {}", order.getId(), e.getMessage());
+        }
     }
 
     public Order farmerConfirm(String orderId, boolean confirmed, String reason) {
@@ -133,14 +148,9 @@ public class OrderService {
         }
         order.setUpdatedAt(LocalDateTime.now());
         Order saved = orderRepository.save(order);
-        
-        String msg = confirmed ? "Farmer confirmed order for " + order.getCropName() : "Farmer rejected order for " + order.getCropName() + " (Reason: " + reason + ")";
-        notificationRepository.save(net.farmtocloud.app.entity.Notification.builder()
-            .userId(order.getKitchenId())
-            .message(msg)
-            .type("STATUS_UPDATE")
-            .build());
-            
+
+        notifyOrderStatusChange(saved);
+
         return saved;
     }
 

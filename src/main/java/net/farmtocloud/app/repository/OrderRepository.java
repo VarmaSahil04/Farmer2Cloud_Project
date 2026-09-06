@@ -11,10 +11,10 @@ public interface OrderRepository extends MongoRepository<Order, String> {
     List<Order> findByKitchenId(String kitchenId);
     List<Order> findByFarmerId(String farmerId);
     List<Order> findByStatus(String status);
+    List<Order> findByStatusIn(List<String> statuses);
     List<Order> findByKitchenIdAndStatus(String kitchenId, String status);
     List<Order> findByFarmerIdAndStatus(String farmerId, String status);
     List<Order> findByCropName(String cropName);
     long countByKitchenId(String kitchenId);
     long countByFarmerId(String farmerId);
-    List<Order> findByStatusIn(List<String> statuses);
 }

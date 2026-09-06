@@ -35,4 +35,23 @@ public class AuthController {
             return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
         }
     }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<ApiResponse> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        // Always returns success, even if the email isn't registered,
+        // so the endpoint can't be used to enumerate valid accounts.
+        authService.forgotPassword(request.getEmail());
+        return ResponseEntity.ok(ApiResponse.success(
+                "If that email is registered, a password reset code has been sent.", null));
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<ApiResponse> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        try {
+            authService.resetPassword(request.getToken(), request.getNewPassword());
+            return ResponseEntity.ok(ApiResponse.success("Password reset successful", null));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
+        }
+    }
 }
